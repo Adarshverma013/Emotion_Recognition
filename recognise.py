@@ -1,53 +1,67 @@
 import os
-import cv2
+import cv2 as cv
 import numpy as np
 from keras.models import model_from_json
 from keras.preprocessing import image
 
-#load model
+# loading model
 model = model_from_json(open("fer.json", "r").read())
-#load weights
+# loading weights
 model.load_weights('fer.h5')
 
+# cascade classifier to find faces in the image
+fhc = cv.CascadeClassifier('haarcascade_frontalface_default.xml')
 
-face_haar_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+# starting the video
+capture=cv.VideoCapture(0)
 
-
-cap=cv2.VideoCapture(0)
-
+# looping over each frame one by one
 while True:
-    ret,test_img=cap.read()# captures frame and returns boolean value and captured image
-    #test_img=cv2.imread("happy.jpg")
+    
+    # capturing the frame ret = false if not captured
+    ret,img=capture.read()
+    
      if not ret:
          continue
-    gray_img= cv2.cvtColor(test_img, cv2.COLOR_BGR2GRAY)
+    # converting in gray scale for further processing as cascade classifier deals with gray scale images
+    g_img= cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    
+    # using cascade classifier to find faces
+    faces_found = fhc.detectMultiScale(g_img, 1.32, 5)
 
-    faces_detected = face_haar_cascade.detectMultiScale(gray_img, 1.32, 5)
-
-
-    for (x,y,w,h) in faces_detected:
-        cv2.rectangle(test_img,(x,y),(x+w,y+h),(255,0,0),thickness=7)
-        roi_gray=gray_img[y:y+w,x:x+h]#cropping region of interest i.e. face area from  image
-        roi_gray=cv2.resize(roi_gray,(48,48))
-        img_pixels = image.img_to_array(roi_gray)
+    # looping over all the faces found
+    for (x,y,w,h) in faces_found:
+        
+        # drawing rectangle around the face
+        cv.rectangle(img,(x,y),(x+w,y+h),(255,0,0),thickness=7)
+        
+        #cropping the face from the image and resizing
+        face = g_img[y:y+w,x:x+h]
+        face =cv2.resize(face,(48,48))
+        
+        img_pixels = image.img_to_array(face)
+        
+        # expanding dimension to 3 channel as gray has 2 channel only and model is trained on colored image
         img_pixels = np.expand_dims(img_pixels, axis = 0)
         img_pixels /= 255
-
+        
+        # getting the predictions
         predictions = model.predict(img_pixels)
 
         #find max indexed array
         max_index = np.argmax(predictions[0])
-
+        
         emotions = ('angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutral')
         predicted_emotion = emotions[max_index]
+        
+        # putting text of emotion
+        cv.putText(img, predicted_emotion, (int(x), int(y)), cv.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
 
-        cv2.putText(test_img, predicted_emotion, (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
+    resized_img = cv.resize(img, (1000, 700))
+    cv.imshow('Facial emotion analysis ',resized_img)
 
-resized_img = cv2.resize(test_img, (1000, 700))
-cv2.imshow('Facial emotion analysis ',resized_img)
-cv2.waitKey(0)
-# if cv2.waitKey(10) == ord('q'):#wait until 'q' key is pressed
-#     break
+    if cv2.waitKey(10) == ord('q'):
+         break
 
-#cap.release()
-cv2.destroyAllWindows
+capture.release()
+cv.destroyAllWindows
